@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NETSENTINEL — Incident Response Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+/* ── 1. CSS Custom Properties ─────────────────────────────── */
+:root {
+  --bg-void:        #0a0a0f;
+  --bg-panel:       #0f0f1a;
+  --bg-panel-dark:  #16162a;
+  --neon-blue:      #00d9ff;
+  --neon-cyan:      #00ffff;
+  --cyber-green:    #00ffaa;
+  --alarm-red:      #ff0055;
+  --warning-orange: #ffa500;
+  --purple-accent:  #7b61ff;
+  --text-bright:    #e0e7ff;
+  --text-muted:     #8b92b0;
+  --border-blue:    rgba(0,217,255,0.25);
+  --border-green:   rgba(0,255,170,0.25);
+  --glow-blue:      rgba(0,217,255,0.15);
+  --glow-green:     rgba(0,255,170,0.15);
+  --glow-red:       rgba(255,0,85,0.15);
+  --glow-orange:    rgba(255,165,0,0.15);
+  --grid-line:      rgba(0,217,255,0.08);
+  --font-mono:    'Share Tech Mono','Courier New',monospace;
+  --font-display: 'Orbitron',sans-serif;
+  --font-body:    'Rajdhani',sans-serif;
+  --header-h: 68px;
+  --body-pad: clamp(1.25rem,3vw,2rem);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --t-fast: 120ms ease;
+  --t-base: 200ms ease;
+}
+
+/* ── 2. Reset & Base ──────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background-color:var(--bg-void);color:var(--text-bright);font-family:var(--font-body);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button{cursor:pointer;font-family:inherit}
+a{color:inherit;text-decoration:none}
+input,select{font-family:inherit}
+em{font-style:normal}
+svg{display:block;flex-shrink:0}
+
+/* ── 3. Page Router ───────────────────────────────────────── */
+.page{display:none;position:absolute;inset:0;width:100%;min-height:100vh;padding:3rem 2rem 2rem;background:radial-gradient(circle at 30% 10%,rgba(0,255,170,.12),transparent 22%),linear-gradient(180deg,#05060f,#04070d);overflow-x:hidden;transition:opacity .3s ease,transform .3s ease}
+.page--active{display:block;opacity:1;transform:translateY(0)}
+.page:not(.page--active){opacity:0;transform:translateY(12px);pointer-events:none}
+#page-login{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:2rem}
+#page-login.page--active{display:flex}
+#page-admin-dashboard{background:radial-gradient(circle at 10% 15%,rgba(0,217,255,.16),transparent 20%),linear-gradient(180deg,#06090f,#050709)}
+#page-admin-panel{background:radial-gradient(circle at 90% 15%,rgba(255,85,136,.14),transparent 20%),linear-gradient(180deg,#10070f,#050709)}
+#page-viewer-dashboard{background:radial-gradient(circle at 50% 8%,rgba(0,255,170,.14),transparent 18%),linear-gradient(180deg,#05100c,#050709)}
+.console-header{background:rgba(3,9,18,.94);border-bottom:1px solid rgba(0,217,255,.15);backdrop-filter:blur(12px);box-shadow:0 22px 56px rgba(0,0,0,.24)}
+.console-body{max-width:1380px;margin:0 auto;position:relative;z-index:1}
+.cam-panel,.data-card{background:rgba(6,10,20,.94);border:1px solid rgba(0,217,255,.12);box-shadow:0 26px 84px rgba(0,0,0,.24);border-radius:26px}
+
+/* ── 4. Circuit Grid Background ──────────────────────────── */
+.circuit-grid{position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);background-size:50px 50px;animation:gridDrift 60s linear infinite}
+.circuit-grid--green{--grid-line:rgba(0,255,170,0.07)}
+@keyframes gridDrift{from{background-position:0 0}to{background-position:50px 50px}}
+.corner-spark{position:fixed;width:200px;height:200px;pointer-events:none;z-index:0;border-radius:50%;filter:blur(80px);opacity:.15;background:var(--neon-blue);animation:sparkPulse 4s ease-in-out infinite alternate}
+.corner-spark--tl{top:-60px;left:-60px}
+.corner-spark--br{bottom:-60px;right:-60px;animation-delay:2s}
+@keyframes sparkPulse{from{opacity:.08;transform:scale(1)}to{opacity:.2;transform:scale(1.15)}}
+
+/* ── 5. Buttons ───────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;gap:.45rem;padding:.55rem 1.1rem;border-radius:var(--radius-md);border:1px solid transparent;font-family:var(--font-display);font-size:.72rem;letter-spacing:.08em;font-weight:600;transition:background var(--t-base),box-shadow var(--t-base),color var(--t-base);white-space:nowrap}
+.btn--primary{background:var(--neon-blue);color:var(--bg-void);border-color:var(--neon-blue);box-shadow:0 0 20px rgba(0,217,255,.45)}
+.btn--primary:hover{background:var(--neon-cyan);box-shadow:0 0 32px rgba(0,217,255,.7)}
+.btn--accent{background:var(--cyber-green);color:var(--bg-void);border-color:var(--cyber-green);box-shadow:0 0 16px rgba(0,255,170,.45)}
+.btn--accent:hover{box-shadow:0 0 28px rgba(0,255,170,.7)}
+.btn--alarm{background:var(--alarm-red);color:#fff;border-color:var(--alarm-red);box-shadow:0 0 16px rgba(255,0,85,.45)}
+.btn--alarm:hover{box-shadow:0 0 28px rgba(255,0,85,.7)}
+.btn--ghost{background:var(--bg-panel-dark);color:var(--neon-blue);border-color:var(--border-blue)}
+.btn--ghost:hover{background:rgba(0,217,255,.1)}
+.btn--ghost-green{background:var(--bg-panel-dark);color:var(--cyber-green);border-color:var(--border-green)}
+.btn--ghost-green:hover{background:rgba(0,255,170,.1)}
+.btn--ghost-orange{background:var(--bg-panel-dark);color:var(--warning-orange);border-color:rgba(255,165,0,.3)}
+.btn--ghost-orange:hover{background:rgba(255,165,0,.1)}
+.btn--ghost-red{background:var(--bg-panel-dark);color:var(--alarm-red);border-color:rgba(255,0,85,.3)}
+.btn--ghost-red:hover{background:rgba(255,0,85,.1)}
+.btn--muted{color:var(--text-muted)}
+.btn--muted:hover{color:var(--text-bright)}
+.btn--full{width:100%;justify-content:center;padding:1rem;font-size:.8rem}
+.btn--xs{padding:.35rem .75rem;font-size:.65rem}
+.btn-arrow{width:18px;height:18px;transition:transform var(--t-base)}
+.btn--primary:hover .btn-arrow{transform:translateX(4px)}
+
+/* ── 6. Console Header ────────────────────────────────────── */
+.console-header{position:sticky;top:0;z-index:100;height:var(--header-h);border-bottom:1px solid var(--border-blue);background:rgba(15,15,26,.85);backdrop-filter:blur(12px)}
+.console-header--green{border-bottom-color:var(--border-green)}
+.header-inner{max-width:1400px;margin:0 auto;height:100%;padding:0 var(--body-pad);display:flex;align-items:center;justify-content:space-between}
+.header-brand{display:flex;align-items:center;gap:.85rem}
+.header-brand-name{font-family:var(--font-display);font-size:1.15rem;font-weight:700;letter-spacing:.15em;color:var(--neon-blue);text-shadow:0 0 14px rgba(0,217,255,.55);line-height:1.1}
+.header-brand-name--green{color:var(--cyber-green);text-shadow:0 0 14px rgba(0,255,170,.55)}
+.header-brand-sub{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.12em;color:var(--text-muted);margin-top:1px}
+.header-nav{display:flex;align-items:center;gap:.6rem}
+
+/* ── 7. Brand Icon ────────────────────────────────────────── */
+.brand-icon{width:48px;height:52px;color:var(--neon-blue);filter:drop-shadow(0 0 8px rgba(0,217,255,.6))}
+.brand-icon--sm{width:32px;height:35px}
+.brand-icon--green{color:var(--cyber-green);filter:drop-shadow(0 0 8px rgba(0,255,170,.6))}
+
+/* ── 8. Console Body ──────────────────────────────────────── */
+.console-body{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:2rem var(--body-pad) 3rem}
+
+/* ── 9. Page Titles ───────────────────────────────────────── */
+.page-title{font-family:var(--font-display);font-size:clamp(1.2rem,2.5vw,1.65rem);font-weight:700;letter-spacing:.1em;line-height:1.2}
+.page-title--blue{color:var(--neon-blue);text-shadow:0 0 18px rgba(0,217,255,.4)}
+.page-title--green{color:var(--cyber-green);text-shadow:0 0 18px rgba(0,255,170,.4)}
+.page-subtitle{font-family:var(--font-mono);font-size:.72rem;color:var(--text-muted);margin-top:.35rem;letter-spacing:.04em}
+.page-title-row{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem}
+.action-btns{display:flex;gap:.65rem;flex-wrap:wrap;align-items:center}
+
+/* ── 10. Camera Panel ─────────────────────────────────────── */
+.cam-panel{border-radius:var(--radius-lg);overflow:hidden;border:1.5px solid var(--border-blue);box-shadow:0 0 40px rgba(0,217,255,.12),inset 0 0 40px rgba(0,0,0,.4)}
+.cam-panel--green{border-color:var(--border-green);box-shadow:0 0 40px rgba(0,255,170,.12),inset 0 0 40px rgba(0,0,0,.4)}
+.cam-header{background:var(--bg-panel-dark);border-bottom:1px solid var(--border-blue);padding:.75rem 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.cam-header--green{border-bottom-color:var(--border-green)}
+.cam-header-left{display:flex;align-items:center;gap:.85rem;flex-wrap:wrap}
+.cam-header-right{display:flex;align-items:center;gap:.65rem;flex-wrap:wrap}
+.cam-label{font-family:var(--font-display);font-size:.72rem;letter-spacing:.1em;color:var(--neon-blue)}
+.cam-label--green{color:var(--cyber-green)}
+.icon-neon-blue{color:var(--neon-blue)}
+.icon-neon-green{color:var(--cyber-green)}
+.rec-badge{display:flex;align-items:center;gap:.35rem;font-family:var(--font-mono);font-size:.68rem;color:var(--alarm-red);letter-spacing:.06em}
+.rec-dot{width:9px;height:9px;border-radius:50%;background:var(--alarm-red);box-shadow:0 0 8px rgba(255,0,85,.9);animation:recPulse 1s ease-in-out infinite alternate}
+@keyframes recPulse{from{opacity:1;box-shadow:0 0 8px rgba(255,0,85,.9)}to{opacity:.5;box-shadow:0 0 4px rgba(255,0,85,.4)}}
+.cam-viewport{position:relative;background:#000;aspect-ratio:16/9;overflow:hidden}
+.cam-viewport--viewer{background:linear-gradient(160deg,#0d1a17 0%,#0a110e 50%,#000 100%)}
+.thermal-svg{position:absolute;inset:0;width:100%;height:100%}
+.scan-line{animation:scanMove 3s linear infinite;opacity:0}
+.scan-line--active{opacity:.75}
+@keyframes scanMove{0%{transform:translateY(0);opacity:.8}100%{transform:translateY(450px);opacity:.2}}
+.cam-status-bar{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,.9) 0%,transparent 100%);padding:1.5rem 1.25rem .75rem;display:flex;align-items:center;gap:clamp(.5rem,2vw,1.5rem);flex-wrap:wrap}
+.cam-stat{font-family:var(--font-mono);font-size:.65rem;color:var(--cyber-green);text-shadow:0 0 8px rgba(0,255,170,.5);letter-spacing:.04em}
+.scanlines{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,170,.04) 2px,rgba(0,255,170,.04) 4px);pointer-events:none;z-index:2}
+.monitor-glow{position:absolute;top:30%;left:20%;width:200px;height:150px;background:radial-gradient(circle,rgba(0,255,170,.18) 0%,transparent 70%);filter:blur(30px);pointer-events:none;z-index:1;animation:glowPulse 3s ease-in-out infinite alternate}
+@keyframes glowPulse{from{opacity:.6}to{opacity:1}}
+.viewer-grid-svg{position:absolute;inset:0;width:100%;height:100%;z-index:1}
+.viewer-cam-label{position:absolute;z-index:3;font-family:var(--font-mono);font-size:.78rem;color:var(--cyber-green);text-shadow:0 0 10px rgba(0,255,170,.8);top:1rem}
+.viewer-cam-label--tl{left:1rem}
+.viewer-cam-label--tr{right:1rem}
+.feeds-nominal{margin-top:1.25rem;text-align:center;font-family:var(--font-mono);font-size:.75rem;color:var(--cyber-green);text-shadow:0 0 10px rgba(0,255,170,.5);letter-spacing:.08em}
+
+/* ── 11. Two Column Grid ──────────────────────────────────── */
+.two-col-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:2.5rem}
+.panel-section{display:flex;flex-direction:column;gap:1.25rem}
+
+/* ── 12. Stats Cards ──────────────────────────────────────── */
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}
+.stat-card{background:var(--bg-panel);border-radius:var(--radius-md);padding:1rem;text-align:center;border:1px solid var(--border-blue);transition:box-shadow var(--t-base)}
+.stat-card--blue{border-color:rgba(0,217,255,.28);box-shadow:0 0 20px rgba(0,217,255,.07)}
+.stat-card--orange{border-color:rgba(255,165,0,.28);box-shadow:0 0 20px rgba(255,165,0,.07)}
+.stat-card--green{border-color:rgba(0,255,170,.28);box-shadow:0 0 20px rgba(0,255,170,.07)}
+.stat-card:hover{box-shadow:0 0 30px rgba(0,217,255,.15)}
+.stat-label{font-family:var(--font-mono);font-size:.62rem;color:var(--text-muted);letter-spacing:.06em;margin-bottom:.35rem;text-transform:uppercase}
+.stat-value{font-family:var(--font-display);font-size:2rem;font-weight:700;line-height:1}
+.stat-value--blue{color:var(--neon-blue);text-shadow:0 0 12px rgba(0,217,255,.5)}
+.stat-value--orange{color:var(--warning-orange);text-shadow:0 0 12px rgba(255,165,0,.5)}
+.stat-value--green{color:var(--cyber-green);text-shadow:0 0 12px rgba(0,255,170,.5)}
+
+/* ── 13. Data Card ────────────────────────────────────────── */
+.data-card{background:var(--bg-panel);border:1.5px solid var(--border-blue);border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 0 30px rgba(0,217,255,.08);display:flex;flex-direction:column}
+.data-card--green{border-color:var(--border-green);box-shadow:0 0 30px rgba(0,255,170,.08)}
+.data-card__head{background:var(--bg-panel-dark);border-bottom:1px solid var(--border-blue);padding:.75rem 1.25rem;font-family:var(--font-display);font-size:.72rem;letter-spacing:.12em;color:var(--neon-blue)}
+.data-card__head--green{border-bottom-color:var(--border-green);color:var(--cyber-green)}
+.data-card__head.log-filters{display:flex;gap:.65rem;flex-wrap:wrap;align-items:center}
+.data-card__foot{background:var(--bg-panel-dark);border-top:1px solid var(--border-blue);padding:.85rem 1.25rem;display:flex;gap:.65rem;flex-wrap:wrap}
+
+/* ── 14. Data Tables ──────────────────────────────────────── */
+.table-wrap{overflow-x:auto}
+.data-table{width:100%;border-collapse:collapse;font-size:.82rem}
+.data-table thead{background:var(--bg-panel-dark);border-bottom:1px solid rgba(0,217,255,.18)}
+.data-table--green thead{border-bottom-color:rgba(0,255,170,.18)}
+.data-table th{text-align:left;padding:.65rem 1.25rem;font-family:var(--font-display);font-size:.62rem;letter-spacing:.1em;color:var(--neon-blue);font-weight:600}
+.data-table--green th{color:var(--cyber-green)}
+.data-table td{padding:.85rem 1.25rem;color:var(--text-bright);border-bottom:1px solid rgba(0,217,255,.07);vertical-align:middle}
+.data-table--green td{border-bottom-color:rgba(0,255,170,.07)}
+.data-table tbody tr:last-child td{border-bottom:none}
+.data-table tbody tr{transition:background var(--t-fast)}
+.data-table tbody tr:hover{background:rgba(22,22,42,.5)}
+.cell--muted{color:var(--text-muted);font-size:.8rem}
+.cell--green{color:var(--cyber-green)}
+.cell--orange{color:var(--warning-orange)}
+.user-cell{display:flex;align-items:center;gap:.75rem}
+.user-avatar{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:rgba(0,217,255,.12);border:1px solid rgba(0,217,255,.4);color:var(--neon-blue);font-family:var(--font-display);font-size:.6rem;letter-spacing:.04em;flex-shrink:0}
+.event-cell{display:flex;align-items:center;gap:.6rem}
+.status-badge{display:inline-flex;align-items:center;gap:.35rem;font-family:var(--font-mono);font-size:.68rem;letter-spacing:.04em}
+.status-badge::before{content:'';width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.status-badge--online{color:var(--cyber-green)}
+.status-badge--online::before{background:var(--cyber-green);box-shadow:0 0 6px rgba(0,255,170,.8)}
+.status-badge--offline{color:var(--text-muted)}
+.status-badge--offline::before{background:var(--text-muted)}
+.link-btn{background:none;border:none;color:var(--neon-blue);font-family:var(--font-mono);font-size:.72rem;cursor:pointer;transition:color var(--t-fast)}
+.link-btn:hover{color:var(--neon-cyan);text-decoration:underline}
+
+/* ── 15. Log Entries ──────────────────────────────────────── */
+.log-list{flex:1;overflow-y:auto}
+.log-entry{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:1rem 1.25rem;border-bottom:1px solid rgba(0,217,255,.07);transition:background var(--t-fast)}
+.log-entry:last-child{border-bottom:none}
+.log-entry:hover{background:rgba(22,22,42,.45)}
+.log-entry__body{flex:1;min-width:0}
+.log-entry__msg{font-size:.83rem;color:var(--text-bright);margin-bottom:.35rem;line-height:1.4}
+.log-entry__meta{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;font-family:var(--font-mono);font-size:.62rem;color:var(--text-muted);letter-spacing:.03em}
+.meta-blue{color:var(--neon-blue)}
+.meta-green{color:var(--cyber-green)}
+.log-badge{display:inline-block;padding:.2rem .55rem;border-radius:var(--radius-sm);font-family:var(--font-display);font-size:.58rem;letter-spacing:.1em;font-weight:600;flex-shrink:0;align-self:flex-start;margin-top:.15rem}
+.log-badge--success{background:rgba(0,255,170,.15);color:var(--cyber-green)}
+.log-badge--failed{background:rgba(255,165,0,.15);color:var(--warning-orange)}
+.log-badge--blocked{background:rgba(255,0,85,.15);color:var(--alarm-red)}
+.console-select,.console-input{background:var(--bg-panel);border:1px solid var(--border-blue);border-radius:var(--radius-sm);padding:.4rem .75rem;font-family:var(--font-mono);font-size:.68rem;color:var(--text-bright);transition:border-color var(--t-fast),box-shadow var(--t-fast);outline:none;appearance:none;-webkit-appearance:none}
+.console-input{flex:1;min-width:120px}
+.console-select:focus,.console-input:focus{border-color:var(--neon-blue);box-shadow:0 0 0 2px rgba(0,217,255,.18)}
+.console-input::placeholder{color:rgba(139,146,176,.45)}
+
+/* ── 16. Viewer Status Bar ────────────────────────────────── */
+.viewer-status-bar{margin-top:1.5rem;background:var(--bg-panel);border:1px solid var(--border-green);border-radius:var(--radius-md);padding:1rem 1.5rem;display:flex;align-items:center;justify-content:space-around;gap:1rem;flex-wrap:wrap;box-shadow:0 0 20px rgba(0,255,170,.07)}
+.viewer-stat{display:flex;align-items:center;gap:.65rem}
+.viewer-stat__label{font-family:var(--font-mono);font-size:.68rem;color:var(--text-muted);letter-spacing:.04em}
+.viewer-stat__val{font-family:var(--font-display);font-size:.72rem;color:var(--cyber-green);letter-spacing:.08em;text-shadow:0 0 8px rgba(0,255,170,.4)}
+
+/* ── 17. Login Page ───────────────────────────────────────── */
+.login-wrapper{position:relative;z-index:1;width:100%;max-width:440px;display:flex;flex-direction:column;align-items:center;gap:1.75rem}
+.login-brand{display:flex;align-items:center;gap:1rem;margin-bottom:.25rem}
+.brand-name{font-family:var(--font-display);font-size:2rem;font-weight:900;letter-spacing:.2em;color:var(--neon-blue);text-shadow:0 0 22px rgba(0,217,255,.6);line-height:1.1}
+.brand-text{display:flex;flex-direction:column}
+.brand-subtitle{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.2em;color:var(--text-muted);margin-top:.2rem}
+.login-card{width:100%;background:var(--bg-panel);border:1.5px solid var(--border-blue);border-radius:var(--radius-lg);padding:2rem;box-shadow:0 0 40px rgba(0,217,255,.15),inset 0 0 60px rgba(0,0,0,.3);position:relative}
+.bracket{position:absolute;width:16px;height:16px;border-color:var(--neon-blue);border-style:solid;opacity:.7;animation:bracketPulse 2.5s ease-in-out infinite alternate}
+.bracket--tl{top:-1px;left:-1px;border-width:2px 0 0 2px}
+.bracket--tr{top:-1px;right:-1px;border-width:2px 2px 0 0;animation-delay:.6s}
+.bracket--bl{bottom:-1px;left:-1px;border-width:0 0 2px 2px;animation-delay:1.2s}
+.bracket--br{bottom:-1px;right:-1px;border-width:0 2px 2px 0;animation-delay:1.8s}
+@keyframes bracketPulse{from{opacity:.4}to{opacity:1;box-shadow:0 0 6px rgba(0,217,255,.6)}}
+.tab-toggle{display:flex;background:var(--bg-panel-dark);border-radius:var(--radius-sm);padding:3px;margin-bottom:1.5rem;gap:3px}
+.tab-btn{flex:1;padding:.55rem 1rem;border:none;border-radius:var(--radius-sm);font-family:var(--font-display);font-size:.68rem;letter-spacing:.1em;color:var(--text-muted);background:transparent;transition:background var(--t-base),color var(--t-base),box-shadow var(--t-base)}
+.tab-btn--active{background:var(--neon-blue);color:var(--bg-void);box-shadow:0 0 16px rgba(0,217,255,.55)}
+.tab-btn:not(.tab-btn--active):hover{color:var(--text-bright)}
+.login-form{display:flex;flex-direction:column;gap:1.1rem}
+.field-group{display:flex;flex-direction:column;gap:.45rem}
+.field-label{font-family:var(--font-display);font-size:.65rem;letter-spacing:.12em;color:var(--neon-blue)}
+.field-wrap{position:relative}
+.field-input{width:100%;padding:.75rem 1rem;background:var(--bg-panel-dark);border:1px solid var(--border-blue);border-radius:var(--radius-sm);color:var(--text-bright);font-family:var(--font-mono);font-size:.82rem;outline:none;transition:border-color var(--t-base),box-shadow var(--t-base)}
+.field-input::placeholder{color:rgba(139,146,176,.4)}
+.field-input:focus{border-color:var(--neon-blue);box-shadow:0 0 0 2px rgba(0,217,255,.2),0 0 12px rgba(0,217,255,.1)}
+.field-line{position:absolute;bottom:0;left:0;height:2px;width:0;background:var(--neon-blue);box-shadow:0 0 8px rgba(0,217,255,.8);transition:width .3s ease;border-radius:0 0 var(--radius-sm) var(--radius-sm)}
+.field-input:focus+.field-line{width:100%}
+.login-error{font-family:var(--font-mono);font-size:.7rem;color:var(--alarm-red);min-height:1.1em;letter-spacing:.04em}
+.creds-panel{margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid rgba(0,217,255,.15)}
+.creds-title{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.1em;color:var(--text-muted);margin-bottom:.65rem}
+.creds-list{background:var(--bg-panel-dark);border:1px solid rgba(0,255,170,.18);border-radius:var(--radius-sm);padding:.75rem 1rem;display:flex;flex-direction:column;gap:.4rem}
+.cred-row{display:flex;align-items:center;gap:.6rem}
+.cred-role{font-family:var(--font-mono);font-size:.75rem;color:var(--cyber-green);text-shadow:0 0 8px rgba(0,255,170,.4);flex-shrink:0}
+.cred-value{font-family:var(--font-mono);font-size:.75rem;color:var(--text-bright);letter-spacing:.02em}
+.login-footer-note{font-size:.82rem;color:var(--text-muted);text-align:center;margin-top:1rem}
+.link-neon{color:var(--neon-blue);cursor:pointer;transition:text-shadow var(--t-fast)}
+.link-neon:hover{text-shadow:0 0 10px rgba(0,217,255,.6);text-decoration:underline}
+.flow-indicator{display:flex;align-items:center;gap:.5rem;color:rgba(0,217,255,.45)}
+.pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--neon-blue);box-shadow:0 0 8px rgba(0,217,255,.8);animation:recPulse 1.2s ease-in-out infinite alternate}
+.flow-label{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.2em}
+
+/* ── 18. Scrollbar ────────────────────────────────────────── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg-void)}
+::-webkit-scrollbar-thumb{background:rgba(0,217,255,.25);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:rgba(0,217,255,.45)}
+
+/* ── 19. Keyframe: shake ──────────────────────────────────── */
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+
+/* ── 20. Responsive ───────────────────────────────────────── */
+@media(max-width:900px){.stats-row{gap:.65rem}.stat-value{font-size:1.6rem}}
+@media(max-width:640px){:root{--body-pad:1rem}.page-title-row{flex-direction:column;align-items:flex-start}.action-btns{width:100%}.two-col-grid{gap:1.5rem}.stats-row{gap:.5rem}.stat-card{padding:.75rem .5rem}.stat-value{font-size:1.4rem}.stat-label{font-size:.55rem}.login-card{padding:1.5rem 1.25rem}.brand-name{font-size:1.5rem}.cam-status-bar{gap:.65rem;padding-bottom:.5rem}.viewer-status-bar{gap:.75rem}.data-card__head.log-filters{flex-direction:column}.console-input{width:100%}}
+@media(max-width:480px){.header-brand-name{font-size:.95rem}.btn--ghost,.btn--ghost-green{padding:.45rem .75rem;font-size:.62rem}}
+
+/* ── 21. CAMERA ADDITIONS — new rules only, nothing overridden ── */
+/*
+  The live <video> element is absolutely positioned inside each
+  .cam-viewport so it sits BEHIND the existing SVG overlays,
+  status bar, and scanlines.  z-index layering:
+    video           z-index: 0   (behind everything)
+    thermal-svg     z-index: 1   (original SVG art)
+    scanlines       z-index: 2   (original)
+    cam-status-bar  z-index: 3   (original)
+    cam-err-overlay z-index: 10  (new — error message on top)
+    viewer-grid-svg z-index: 1   (original)
+    monitor-glow    z-index: 1   (original)
+    viewer-cam-label z-index: 3  (original)
+*/
+.cam-live-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);       /* mirror — natural selfie-camera view */
+  opacity: 0;                  /* start invisible; revealed on stream start */
+  transition: opacity .6s ease;
+  z-index: 0;
+}
+.cam-live-video--active {
+  opacity: 0.55;               /* blended under thermal SVG art */
+}
+/* Viewer page: the live feed is more prominent since there's no thermal overlay */
+#page-viewer-dashboard .cam-live-video--active {
+  opacity: 0.85;
+}
+
+/* Error overlay that floats above everything in the viewport */
+.cam-err-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: rgba(10,10,15,.82);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .65rem;
+  padding: 2rem;
+  text-align: center;
+}
+.cam-err-overlay--visible { display: flex; }
+.cam-err-icon {
+  font-size: 2.2rem;
+  color: var(--alarm-red);
+  text-shadow: 0 0 14px rgba(255,0,85,.7);
+  font-family: var(--font-display);
+}
+.cam-err-title {
+  font-family: var(--font-display);
+  font-size: .78rem;
+  letter-spacing: .14em;
+  color: var(--alarm-red);
+}
+.cam-err-msg {
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  color: var(--text-muted);
+  line-height: 1.65;
+  max-width: 340px;
+}
+.cam-err-code {
+  font-family: var(--font-mono);
+  font-size: .62rem;
+  color: rgba(255,0,85,.5);
+  letter-spacing: .05em;
+}
+  </style>
+</head>
+<body>
+
+  <!-- ── PAGE: LOGIN ─────────────────────────────────────────────────────── -->
+  <main id="page-login" class="page page--active" aria-label="Login">
+    <div class="circuit-grid" aria-hidden="true"></div>
+    <div class="corner-spark corner-spark--tl" aria-hidden="true"></div>
+    <div class="corner-spark corner-spark--br" aria-hidden="true"></div>
+
+    <section class="login-wrapper">
+      <header class="login-brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 40 46" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M20 2L3 10V22C3 31.94 10.5 41.22 20 44C29.5 41.22 37 31.94 37 22V10L20 2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/>
+            <path d="M14 23L18 27L26 19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1 class="brand-name">NETSENTINEL</h1>
+          <p class="brand-subtitle">INCIDENT RESPONSE CONSOLE</p>
+        </div>
+      </header>
+
+      <div class="login-card" role="region" aria-label="Authentication">
+        <span class="bracket bracket--tl" aria-hidden="true"></span>
+        <span class="bracket bracket--tr" aria-hidden="true"></span>
+        <span class="bracket bracket--bl" aria-hidden="true"></span>
+        <span class="bracket bracket--br" aria-hidden="true"></span>
+
+        <div class="tab-toggle" role="tablist">
+          <button class="tab-btn tab-btn--active" role="tab" aria-selected="true">LOGIN</button>
+          <button class="tab-btn" role="tab" aria-selected="false">CREATE ACCOUNT</button>
+        </div>
+
+        <form class="login-form" id="loginForm" novalidate>
+          <div class="field-group">
+            <label class="field-label" for="username">USERNAME</label>
+            <div class="field-wrap">
+              <input class="field-input" id="username" type="text" placeholder="Enter your secure handle" autocomplete="username" />
+              <span class="field-line" aria-hidden="true"></span>
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="password">PASSWORD</label>
+            <div class="field-wrap">
+              <input class="field-input" id="password" type="password" placeholder="Enter secure passphrase" autocomplete="current-password" />
+              <span class="field-line" aria-hidden="true"></span>
+            </div>
+          </div>
+          <p class="login-error" id="loginError" role="alert" aria-live="polite"></p>
+          <button class="btn btn--primary btn--full" type="submit">
+            ACCESS SYSTEM
+            <svg class="btn-arrow" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </form>
+
+        <div class="creds-panel">
+          <p class="creds-title">TEST CREDENTIALS</p>
+          <div class="creds-list">
+            <div class="cred-row"><span class="cred-role">Admin:</span><span class="cred-value">admin / Admin@12345</span></div>
+            <div class="cred-row"><span class="cred-role">Viewer:</span><span class="cred-value">viewer1 / Viewer@12345</span></div>
+          </div>
+        </div>
+        <p class="login-footer-note">No account? <a href="#" class="link-neon">Create one</a></p>
+      </div>
+
+      <div class="flow-indicator" aria-hidden="true">
+        <span class="pulse-dot"></span>
+        <svg viewBox="0 0 20 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M0 4H16M16 4L12 1M16 4L12 7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        <span class="flow-label">DASHBOARD ACCESS</span>
+      </div>
+    </section>
+  </main>
+
+  <!-- ── PAGE: ADMIN DASHBOARD ───────────────────────────────────────────── -->
+  <main id="page-admin-dashboard" class="page" aria-label="Admin Dashboard">
+    <div class="circuit-grid" aria-hidden="true"></div>
+
+    <header class="console-header">
+      <div class="header-inner">
+        <div class="header-brand">
+          <div class="brand-icon brand-icon--sm">
+            <svg viewBox="0 0 40 46" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M20 2L3 10V22C3 31.94 10.5 41.22 20 44C29.5 41.22 37 31.94 37 22V10L20 2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/>
+              <path d="M14 23L18 27L26 19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <p class="header-brand-name">NETSENTINEL</p>
+            <p class="header-brand-sub">ADMIN DASHBOARD</p>
+          </div>
+        </div>
+        <nav class="header-nav">
+          <button class="btn btn--ghost" data-nav="page-admin-panel">
+            <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" aria-hidden="true">
+              <circle cx="7" cy="7" r="3" stroke="currentColor" stroke-width="1.5"/>
+              <circle cx="13" cy="7" r="3" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M2 17c0-2.761 2.239-5 5-5h6c2.761 0 5 2.239 5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            ADMIN PANEL
+          </button>
+          <button class="btn btn--ghost btn--muted" data-nav="page-login">LOGOUT</button>
+        </nav>
+      </div>
+    </header>
+
+    <div class="console-body">
+      <section class="page-title-row">
+        <div>
+          <h2 class="page-title page-title--blue">THERMAL CCTV LIVE MONITORING</h2>
+          <p class="page-subtitle">Dual thermal camera feeds &nbsp;|&nbsp; 4K Resolution &nbsp;|&nbsp; AES-256 Encrypted</p>
+        </div>
+        <div class="action-btns">
+          <button class="btn btn--accent" id="btnDetection">
+            <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="18" height="18" aria-hidden="true">
+              <path d="M10 2L2 6v5c0 4.97 3.5 9.61 8 11 4.5-1.39 8-6.03 8-11V6L10 2Z" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M10 8v4M10 14h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+            DETECTION
+          </button>
+          <button class="btn btn--alarm" id="btnIncident">
+            <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="18" height="18" aria-hidden="true">
+              <path d="M10 3L2 17h16L10 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+              <path d="M10 10v3M10 15h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+            MARK INCIDENT
+          </button>
+        </div>
+      </section>
+
+      <section class="cam-panel cam-panel--blue">
+        <div class="cam-header">
+          <div class="cam-header-left">
+            <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="18" height="18" class="icon-neon-blue" aria-hidden="true">
+              <rect x="2" y="6" width="12" height="9" rx="1" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M14 10l4-3v6l-4-3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+            <span class="cam-label">CAM-01 — SERVER ROOM A</span>
+            <div class="rec-badge rec-badge--live">
+              <span class="rec-dot"></span><span>REC</span>
+            </div>
+          </div>
+          <div class="cam-header-right">
+            <button class="btn btn--ghost btn--xs" id="btnSimMotion">Sim Motion</button>
+            <button class="btn btn--ghost btn--xs">Snapshot</button>
+          </div>
+        </div>
+
+        <div class="cam-viewport" id="adminViewport">
+          <!-- CAMERA ADDITION: live video sits at z-index 0, behind all SVG overlays -->
+          <video id="adminVideo" class="cam-live-video" autoplay playsinline muted
+                 aria-label="Live webcam feed — admin dashboard"></video>
+
+          <!-- CAMERA ADDITION: error overlay floats above everything on failure -->
+          <div class="cam-err-overlay" id="adminErrOverlay" role="alert" aria-atomic="true">
+            <span class="cam-err-icon" aria-hidden="true">⚠</span>
+            <p class="cam-err-title" id="adminErrTitle">HARDWARE ERROR</p>
+            <p class="cam-err-msg"   id="adminErrMsg"></p>
+            <p class="cam-err-code"  id="adminErrCode"></p>
+          </div>
+
+          <svg class="thermal-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid slice" aria-label="Thermal camera feed simulation">
+            <defs>
+              <radialGradient id="tg1" cx="50%" cy="50%">
+                <stop offset="0%" stop-color="#00ffaa" stop-opacity="0.9"/>
+                <stop offset="50%" stop-color="#00ffaa" stop-opacity="0.4"/>
+                <stop offset="100%" stop-color="#00ffaa" stop-opacity="0"/>
+              </radialGradient>
+              <radialGradient id="tg2" cx="50%" cy="50%">
+                <stop offset="0%" stop-color="#00d9ff" stop-opacity="0.7"/>
+                <stop offset="100%" stop-color="#00d9ff" stop-opacity="0"/>
+              </radialGradient>
+              <filter id="blur-glow">
+                <feGaussianBlur stdDeviation="3" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+            </defs>
+            <g stroke="#00ffaa" stroke-width="0.4" opacity="0.25">
+              <line x1="0" y1="25" x2="800" y2="25"/><line x1="0" y1="50" x2="800" y2="50"/><line x1="0" y1="75" x2="800" y2="75"/><line x1="0" y1="100" x2="800" y2="100"/><line x1="0" y1="125" x2="800" y2="125"/><line x1="0" y1="150" x2="800" y2="150"/><line x1="0" y1="175" x2="800" y2="175"/><line x1="0" y1="200" x2="800" y2="200"/><line x1="0" y1="225" x2="800" y2="225"/><line x1="0" y1="250" x2="800" y2="250"/><line x1="0" y1="275" x2="800" y2="275"/><line x1="0" y1="300" x2="800" y2="300"/><line x1="0" y1="325" x2="800" y2="325"/><line x1="0" y1="350" x2="800" y2="350"/><line x1="0" y1="375" x2="800" y2="375"/><line x1="0" y1="400" x2="800" y2="400"/><line x1="0" y1="425" x2="800" y2="425"/>
+            </g>
+            <g stroke="#00ffaa" stroke-width="0.4" opacity="0.25">
+              <line x1="25" y1="0" x2="25" y2="450"/><line x1="50" y1="0" x2="50" y2="450"/><line x1="75" y1="0" x2="75" y2="450"/><line x1="100" y1="0" x2="100" y2="450"/><line x1="125" y1="0" x2="125" y2="450"/><line x1="150" y1="0" x2="150" y2="450"/><line x1="175" y1="0" x2="175" y2="450"/><line x1="200" y1="0" x2="200" y2="450"/><line x1="225" y1="0" x2="225" y2="450"/><line x1="250" y1="0" x2="250" y2="450"/><line x1="275" y1="0" x2="275" y2="450"/><line x1="300" y1="0" x2="300" y2="450"/><line x1="325" y1="0" x2="325" y2="450"/><line x1="350" y1="0" x2="350" y2="450"/><line x1="375" y1="0" x2="375" y2="450"/><line x1="400" y1="0" x2="400" y2="450"/><line x1="425" y1="0" x2="425" y2="450"/><line x1="450" y1="0" x2="450" y2="450"/><line x1="475" y1="0" x2="475" y2="450"/><line x1="500" y1="0" x2="500" y2="450"/><line x1="525" y1="0" x2="525" y2="450"/><line x1="550" y1="0" x2="550" y2="450"/><line x1="575" y1="0" x2="575" y2="450"/><line x1="600" y1="0" x2="600" y2="450"/><line x1="625" y1="0" x2="625" y2="450"/><line x1="650" y1="0" x2="650" y2="450"/><line x1="675" y1="0" x2="675" y2="450"/><line x1="700" y1="0" x2="700" y2="450"/><line x1="725" y1="0" x2="725" y2="450"/><line x1="750" y1="0" x2="750" y2="450"/><line x1="775" y1="0" x2="775" y2="450"/>
+            </g>
+            <circle cx="400" cy="225" r="80" fill="url(#tg1)" opacity="0.65" filter="url(#blur-glow)"/>
+            <circle cx="250" cy="180" r="50" fill="url(#tg1)" opacity="0.4" filter="url(#blur-glow)"/>
+            <circle cx="560" cy="270" r="60" fill="url(#tg2)" opacity="0.55" filter="url(#blur-glow)"/>
+            <g stroke="#00ffaa" stroke-width="0.8" opacity="0.5">
+              <line x1="390" y1="225" x2="400" y2="215"/>
+              <line x1="410" y1="225" x2="400" y2="235"/>
+              <circle cx="400" cy="225" r="12" fill="none" stroke="#00ffaa" stroke-width="0.8"/>
+            </g>
+            <rect x="200" y="150" width="120" height="100" fill="none" stroke="#ff0055" stroke-width="2" opacity="0.8" stroke-dasharray="6 3"/>
+            <text x="204" y="146" fill="#ff0055" font-size="10" font-family="'Share Tech Mono',monospace" opacity="0.9">ANOMALY</text>
+            <rect x="480" y="218" width="140" height="120" fill="none" stroke="#ffa500" stroke-width="2" opacity="0.75" stroke-dasharray="6 3"/>
+            <text x="484" y="214" fill="#ffa500" font-size="10" font-family="'Share Tech Mono',monospace" opacity="0.9">HEAT SRC</text>
+            <line class="scan-line" id="scanLine" x1="0" y1="0" x2="800" y2="0" stroke="#00d9ff" stroke-width="1.5" opacity="0" stroke-dasharray="800 0"/>
+          </svg>
+          <footer class="cam-status-bar">
+            <span class="cam-stat" id="liveClock">00:00:00 — PST</span>
+            <span class="cam-stat">Server: <em>ONLINE</em></span>
+            <span class="cam-stat">Temp: <em>21°C</em></span>
+            <span class="cam-stat">Humidity: <em>45%</em></span>
+            <span class="cam-stat">Encrypted</span>
+            <span class="cam-stat">Snapshot Ready</span>
+          </footer>
+        </div>
+      </section>
+      <p class="feeds-nominal">▸ All feeds nominal</p>
+    </div>
+  </main>
+
+  <!-- ── PAGE: ADMIN PANEL ───────────────────────────────────────────────── -->
+  <main id="page-admin-panel" class="page" aria-label="Admin Panel">
+    <div class="circuit-grid" aria-hidden="true"></div>
+
+    <header class="console-header">
+      <div class="header-inner">
+        <div class="header-brand">
+          <div class="brand-icon brand-icon--sm">
+            <svg viewBox="0 0 40 46" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M20 2L3 10V22C3 31.94 10.5 41.22 20 44C29.5 41.22 37 31.94 37 22V10L20 2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/>
+              <path d="M14 23L18 27L26 19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <p class="header-brand-name">NETSENTINEL</p>
+            <p class="header-brand-sub">ADMINISTRATION PANEL &amp; LOGS</p>
+          </div>
+        </div>
+        <nav class="header-nav">
+          <button class="btn btn--ghost" data-nav="page-admin-dashboard">
+            <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" aria-hidden="true">
+              <rect x="2" y="6" width="12" height="9" rx="1" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M14 10l4-3v6l-4-3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+            CCTV FEED
+          </button>
+          <button class="btn btn--ghost btn--muted" data-nav="page-login">LOGOUT</button>
+        </nav>
+      </div>
+    </header>
+
+    <div class="console-body">
+      <div class="two-col-grid">
+        <section class="panel-section">
+          <h2 class="page-title page-title--blue">ADMIN PANEL</h2>
+          <div class="stats-row">
+            <article class="stat-card stat-card--blue"><p class="stat-label">Total Users</p><p class="stat-value stat-value--blue">4</p></article>
+            <article class="stat-card stat-card--orange"><p class="stat-label">Locked Users</p><p class="stat-value stat-value--orange">0</p></article>
+            <article class="stat-card stat-card--green"><p class="stat-label">Active Sessions</p><p class="stat-value stat-value--green">2</p></article>
+          </div>
+          <div class="data-card">
+            <div class="data-card__head">USER MANAGEMENT</div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr><th>USERNAME</th><th>ROLE</th><th>FAILED</th><th>STATUS</th><th>ACTION</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><div class="user-cell"><span class="user-avatar">AU</span>Admin User</div></td>
+                    <td class="cell--muted">Administrator</td><td class="cell--green">0</td>
+                    <td><span class="status-badge status-badge--online">online</span></td>
+                    <td><button class="link-btn">Edit</button></td>
+                  </tr>
+                  <tr>
+                    <td><div class="user-cell"><span class="user-avatar">SK</span>Sarah Kim</div></td>
+                    <td class="cell--muted">SecOps Lead</td><td class="cell--green">0</td>
+                    <td><span class="status-badge status-badge--online">online</span></td>
+                    <td><button class="link-btn">Edit</button></td>
+                  </tr>
+                  <tr>
+                    <td><div class="user-cell"><span class="user-avatar">MC</span>Marcus Chen</div></td>
+                    <td class="cell--muted">Analyst</td><td class="cell--orange">1</td>
+                    <td><span class="status-badge status-badge--offline">offline</span></td>
+                    <td><button class="link-btn">Edit</button></td>
+                  </tr>
+                  <tr>
+                    <td><div class="user-cell"><span class="user-avatar">JW</span>James Wright</div></td>
+                    <td class="cell--muted">Network Admin</td><td class="cell--green">0</td>
+                    <td><span class="status-badge status-badge--offline">offline</span></td>
+                    <td><button class="link-btn">Edit</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="data-card__foot">
+              <button class="btn btn--ghost btn--xs">
+                <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v6M5 8h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                Add New User
+              </button>
+              <button class="btn btn--ghost-orange btn--xs">
+                <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" width="14" height="14" aria-hidden="true"><circle cx="8" cy="6" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M4 13c0-2.209 1.791-4 4-4s4 1.791 4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                Force Password Reset
+              </button>
+              <button class="btn btn--ghost-red btn--xs">
+                <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" width="14" height="14" aria-hidden="true"><path d="M3 4h10M6 4V3h4v1M5 4v8a1 1 0 001 1h4a1 1 0 001-1V4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Clear System Logs
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <h2 class="page-title page-title--blue">LATEST ACTIVITY LOG</h2>
+          <div class="data-card" style="flex:1">
+            <div class="data-card__head log-filters">
+              <select class="console-select" id="typeFilter">
+                <option>All Types</option><option>Login Events</option><option>System Events</option>
+              </select>
+              <select class="console-select" id="statusFilter">
+                <option>All Status</option><option>Success</option><option>Failed</option><option>Blocked</option>
+              </select>
+              <input class="console-input" id="logSearch" type="search" placeholder="Search logs…" aria-label="Search logs" />
+            </div>
+            <div class="log-list">
+              <article class="log-entry">
+                <div class="log-entry__body">
+                  <p class="log-entry__msg">User analyst01 logged in from 10.0.0.55 — remote session</p>
+                  <div class="log-entry__meta"><span>IP: <em class="meta-blue">10.0.0.55</em></span><span>User: <em class="meta-green">analyst01</em></span><span>10:31:36 — 2023-10-25 UTC</span></div>
+                </div>
+                <span class="log-badge log-badge--success">SUCCESS</span>
+              </article>
+              <article class="log-entry">
+                <div class="log-entry__body">
+                  <p class="log-entry__msg">Failed login attempt for admin from 172.16.0.80</p>
+                  <div class="log-entry__meta"><span>IP: <em class="meta-blue">172.16.0.80</em></span><span>User: <em class="meta-green">admin</em></span><span>10:28:14 — 2023-10-25 UTC</span></div>
+                </div>
+                <span class="log-badge log-badge--failed">FAILED</span>
+              </article>
+              <article class="log-entry">
+                <div class="log-entry__body">
+                  <p class="log-entry__msg">User system performed database backup</p>
+                  <div class="log-entry__meta"><span>IP: <em class="meta-blue">10.0.0.1</em></span><span>User: <em class="meta-green">system</em></span><span>10:15:00 — 2023-10-25 UTC</span></div>
+                </div>
+                <span class="log-badge log-badge--success">SUCCESS</span>
+              </article>
+              <article class="log-entry">
+                <div class="log-entry__body">
+                  <p class="log-entry__msg">Marcus Chen accessed admin panel from 10.0.0.62</p>
+                  <div class="log-entry__meta"><span>IP: <em class="meta-blue">10.0.0.62</em></span><span>User: <em class="meta-green">Marcus Chen</em></span><span>10:05:22 — 2023-10-25 UTC</span></div>
+                </div>
+                <span class="log-badge log-badge--success">SUCCESS</span>
+              </article>
+              <article class="log-entry">
+                <div class="log-entry__body">
+                  <p class="log-entry__msg">Failed authentication from 192.168.1.99 — blocked</p>
+                  <div class="log-entry__meta"><span>IP: <em class="meta-blue">192.168.1.99</em></span><span>User: <em class="meta-green">unknown</em></span><span>09:58:41 — 2023-10-25 UTC</span></div>
+                </div>
+                <span class="log-badge log-badge--blocked">BLOCKED</span>
+              </article>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <!-- ── PAGE: VIEWER DASHBOARD ──────────────────────────────────────────── -->
+  <main id="page-viewer-dashboard" class="page" aria-label="Viewer Dashboard">
+    <div class="circuit-grid circuit-grid--green" aria-hidden="true"></div>
+
+    <header class="console-header console-header--green">
+      <div class="header-inner">
+        <div class="header-brand">
+          <div class="brand-icon brand-icon--sm brand-icon--green">
+            <svg viewBox="0 0 40 46" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M20 2L3 10V22C3 31.94 10.5 41.22 20 44C29.5 41.22 37 31.94 37 22V10L20 2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/>
+              <path d="M14 23L18 27L26 19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <p class="header-brand-name header-brand-name--green">NETSENTINEL</p>
+            <p class="header-brand-sub">VIEWER DASHBOARD</p>
+          </div>
+        </div>
+        <nav class="header-nav">
+          <button class="btn btn--ghost-green btn--muted" data-nav="page-login">LOGOUT</button>
+        </nav>
+      </div>
+    </header>
+
+    <div class="console-body">
+      <section class="cam-panel cam-panel--green">
+        <h2 class="page-title page-title--green" style="margin-bottom:1.25rem;padding:1.25rem 1.25rem 0">LIVE MONITORING</h2>
+        <div class="cam-header cam-header--green">
+          <div class="cam-header-left">
+            <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="18" height="18" class="icon-neon-green" aria-hidden="true">
+              <rect x="2" y="6" width="12" height="9" rx="1" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M14 10l4-3v6l-4-3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+            <span class="cam-label cam-label--green">CAM-02 — SECURITY DESK</span>
+            <div class="rec-badge"><span class="rec-dot"></span><span>REC</span></div>
+            <div class="rec-badge"><span class="rec-dot"></span><span>LIVE</span></div>
+          </div>
+          <div class="cam-header-right">
+            <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" class="icon-neon-green" aria-hidden="true">
+              <path d="M10 17A7 7 0 1010 3a7 7 0 000 14Z" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="cam-label cam-label--green" style="font-size:.75rem">IDENTITY VERIFIED</span>
+          </div>
+        </div>
+
+        <div class="cam-viewport cam-viewport--viewer" id="viewerViewport">
+          <!-- CAMERA ADDITION: live video behind all existing overlays -->
+          <video id="viewerVideo" class="cam-live-video" autoplay playsinline muted
+                 aria-label="Live webcam feed — viewer dashboard"></video>
+
+          <!-- CAMERA ADDITION: error overlay -->
+          <div class="cam-err-overlay" id="viewerErrOverlay" role="alert" aria-atomic="true">
+            <span class="cam-err-icon" aria-hidden="true">⚠</span>
+            <p class="cam-err-title" id="viewerErrTitle">HARDWARE ERROR</p>
+            <p class="cam-err-msg"   id="viewerErrMsg"></p>
+            <p class="cam-err-code"  id="viewerErrCode"></p>
+          </div>
+
+          <div class="scanlines" aria-hidden="true"></div>
+          <div class="monitor-glow" aria-hidden="true"></div>
+          <span class="viewer-cam-label viewer-cam-label--tl">CAM-02</span>
+          <span class="viewer-cam-label viewer-cam-label--tr" id="viewerClock">00:00:00</span>
+          <svg class="viewer-grid-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+            <defs>
+              <radialGradient id="vg1" cx="50%" cy="50%">
+                <stop offset="0%" stop-color="#00ffaa" stop-opacity="0.15"/>
+                <stop offset="100%" stop-color="#00ffaa" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <g stroke="#00ffaa" stroke-width="0.4" opacity="0.12">
+              <line x1="0" y1="50" x2="800" y2="50"/><line x1="0" y1="100" x2="800" y2="100"/><line x1="0" y1="150" x2="800" y2="150"/><line x1="0" y1="200" x2="800" y2="200"/><line x1="0" y1="250" x2="800" y2="250"/><line x1="0" y1="300" x2="800" y2="300"/><line x1="0" y1="350" x2="800" y2="350"/><line x1="0" y1="400" x2="800" y2="400"/>
+              <line x1="100" y1="0" x2="100" y2="450"/><line x1="200" y1="0" x2="200" y2="450"/><line x1="300" y1="0" x2="300" y2="450"/><line x1="400" y1="0" x2="400" y2="450"/><line x1="500" y1="0" x2="500" y2="450"/><line x1="600" y1="0" x2="600" y2="450"/><line x1="700" y1="0" x2="700" y2="450"/>
+            </g>
+            <circle cx="300" cy="225" r="120" fill="url(#vg1)"/>
+          </svg>
+        </div>
+      </section>
+
+      <section style="margin-top:2rem">
+        <h2 class="page-title page-title--green" style="margin-bottom:1.25rem">SESSION ACTIVITY LOG</h2>
+        <div class="data-card data-card--green">
+          <div class="data-card__head data-card__head--green">VIEWER ACTIVITY</div>
+          <div class="table-wrap">
+            <table class="data-table data-table--green">
+              <thead>
+                <tr><th>EVENT</th><th>TIME &amp; DATE (UTC)</th><th>DURATION</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><div class="event-cell"><svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" width="14" height="14" class="icon-neon-green" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3.5l2 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Account Log In</div></td>
+                  <td class="cell--muted">10:31:36 — 2023-10-25</td><td class="cell--green">—</td>
+                </tr>
+                <tr>
+                  <td><div class="event-cell"><svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" width="14" height="14" class="icon-neon-green" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3.5l2 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Monitoring Session Started</div></td>
+                  <td class="cell--muted">10:32:15 — 2023-10-25</td><td class="cell--green">2h 43m</td>
+                </tr>
+                <tr>
+                  <td><div class="event-cell"><svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" width="14" height="14" class="icon-neon-green" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3.5l2 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Account Log Out</div></td>
+                  <td class="cell--muted">11:15:22 — 2023-10-25</td><td class="cell--green">—</td>
+                </tr>
+                <tr>
+                  <td><div class="event-cell"><svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" width="14" height="14" class="icon-neon-green" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3.5l2 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Account Log In</div></td>
+                  <td class="cell--muted">14:22:08 — 2023-10-25</td><td class="cell--green">—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <footer class="viewer-status-bar">
+        <div class="viewer-stat"><span class="viewer-stat__label">Operator:</span><span class="viewer-stat__val">viewer1</span></div>
+        <div class="viewer-stat"><span class="viewer-stat__label">Activity:</span><span class="viewer-stat__val">MONITORING</span></div>
+        <div class="viewer-stat"><span class="viewer-stat__label">Console:</span><span class="viewer-stat__val">ACTIVE</span></div>
+      </footer>
+    </div>
+  </main>
+
+  <script>
+'use strict';
+
+/* ══════════════════════════════════════════════════════════════
+   ORIGINAL LOGIC — unchanged
+══════════════════════════════════════════════════════════════ */
+
+/* ── Page Router ─────────────────────────────────────── */
+const pages = document.querySelectorAll('.page');
+
+function navigateTo(pageId) {
+  pages.forEach(p => p.classList.remove('page--active'));
+  const target = document.getElementById(pageId);
+  if (target) {
+    target.classList.add('page--active');
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    updateClock();
+  }
+}
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-nav]');
+  if (btn) navigateTo(btn.dataset.nav);
+});
+
+/* ── Login Auth ──────────────────────────────────────── */
+const CREDENTIALS = {
+  admin:   { pass: 'Admin@12345',  dest: 'page-admin-dashboard' },
+  viewer1: { pass: 'Viewer@12345', dest: 'page-viewer-dashboard' },
+};
+
+const loginForm  = document.getElementById('loginForm');
+const loginError = document.getElementById('loginError');
+
+loginForm.addEventListener('submit', e => {
+  e.preventDefault();
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  const cred = CREDENTIALS[username];
+  loginError.textContent = '';
+  if (!cred || cred.pass !== password) {
+    loginError.textContent = '▸ ACCESS DENIED — Invalid credentials';
+    shakeCard();
+    return;
+  }
+  navigateTo(cred.dest);
+  /* ── CAMERA ADDITION: auto-start camera immediately on successful login ── */
+  startCamera(username);
+});
+
+function shakeCard() {
+  const card = document.querySelector('.login-card');
+  card.style.animation = 'none';
+  card.offsetHeight;
+  card.style.animation = 'shake .4s ease';
+}
+
+/* ── Tab Toggle ──────────────────────────────────────── */
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    btn.closest('.tab-toggle').querySelectorAll('.tab-btn').forEach(b => {
+      b.classList.remove('tab-btn--active');
+      b.setAttribute('aria-selected', 'false');
+    });
+    btn.classList.add('tab-btn--active');
+    btn.setAttribute('aria-selected', 'true');
+  });
+});
+
+/* ── Scan Motion Toggle ──────────────────────────────── */
+const btnSimMotion = document.getElementById('btnSimMotion');
+const scanLine     = document.getElementById('scanLine');
+let motionActive   = false;
+
+if (btnSimMotion && scanLine) {
+  btnSimMotion.addEventListener('click', () => {
+    motionActive = !motionActive;
+    scanLine.classList.toggle('scan-line--active', motionActive);
+    btnSimMotion.textContent = motionActive ? 'Hide Motion' : 'Sim Motion';
+  });
+}
+
+/* ── Button Flash Effects ────────────────────────────── */
+function flashButton(el, shadow) {
+  el.style.transition = 'none';
+  el.style.boxShadow  = shadow;
+  setTimeout(() => { el.style.transition = ''; el.style.boxShadow = ''; }, 300);
+}
+const btnDetection = document.getElementById('btnDetection');
+const btnIncident  = document.getElementById('btnIncident');
+if (btnDetection) btnDetection.addEventListener('click', () => flashButton(btnDetection, '0 0 40px rgba(0,255,170,1)'));
+if (btnIncident)  btnIncident.addEventListener('click',  () => flashButton(btnIncident,  '0 0 40px rgba(255,0,85,1)'));
+
+/* ── Live Clock ──────────────────────────────────────── */
+function padZ(n) { return String(n).padStart(2, '0'); }
+function updateClock() {
+  const now = new Date();
+  const hms = `${padZ(now.getHours())}:${padZ(now.getMinutes())}:${padZ(now.getSeconds())}`;
+  const activePage = document.querySelector('.page--active');
+  if (!activePage) return;
+  const lc = activePage.querySelector('#liveClock');
+  const vc = activePage.querySelector('#viewerClock');
+  if (lc) lc.textContent = `${hms} — PST`;
+  if (vc) vc.textContent = hms;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+/* ── Thermal SVG hover ───────────────────────────────── */
+document.querySelectorAll('.thermal-svg rect').forEach(rect => {
+  rect.addEventListener('mouseenter', () => { rect.style.transition='opacity .2s'; rect.style.opacity='1'; });
+  rect.addEventListener('mouseleave', () => { rect.style.opacity = rect.getAttribute('opacity') || '0.8'; });
+});
+
+/* ── Log Search Filter ───────────────────────────────── */
+const logSearch = document.getElementById('logSearch');
+if (logSearch) {
+  logSearch.addEventListener('input', () => {
+    const q = logSearch.value.toLowerCase();
+    document.querySelectorAll('#page-admin-panel .log-entry').forEach(entry => {
+      entry.style.display = entry.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+  });
+}
+
+/* ── Log Status Dropdown Filter ──────────────────────── */
+const statusFilter = document.getElementById('statusFilter');
+if (statusFilter) {
+  statusFilter.addEventListener('change', () => {
+    const val = statusFilter.value.toUpperCase();
+    document.querySelectorAll('#page-admin-panel .log-entry').forEach(entry => {
+      const badge = entry.querySelector('.log-badge');
+      if (!badge) return;
+      entry.style.display = (val === 'ALL STATUS' || badge.textContent.trim() === val) ? '' : 'none';
+    });
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CAMERA ADDITION — auto hardware access on login
+   All new code is below this line; nothing above was modified.
+══════════════════════════════════════════════════════════════ */
+
+/* Active MediaStream — single shared stream for both personas.
+   If admin switches to viewer (or vice versa) the same stream
+   is reused so the browser only requests permission once.       */
+let activeStream = null;
+
+/*
+  Persona → video element + error overlay element IDs.
+  admin   → page-admin-dashboard  (#adminVideo)
+  viewer1 → page-viewer-dashboard (#viewerVideo)
+*/
+const PERSONA_CAM = {
+  admin:   {
+    videoId:    'adminVideo',
+    errOvId:    'adminErrOverlay',
+    errTitleId: 'adminErrTitle',
+    errMsgId:   'adminErrMsg',
+    errCodeId:  'adminErrCode',
+  },
+  viewer1: {
+    videoId:    'viewerVideo',
+    errOvId:    'viewerErrOverlay',
+    errTitleId: 'viewerErrTitle',
+    errMsgId:   'viewerErrMsg',
+    errCodeId:  'viewerErrCode',
+  },
+};
+
+/*
+  showCamError — surfaces a descriptive error inside the relevant
+  viewport without touching any other part of the page.
+*/
+function showCamError(persona, title, msg, code) {
+  const cfg = PERSONA_CAM[persona];
+  if (!cfg) return;
+  document.getElementById(cfg.errTitleId).textContent = title;
+  document.getElementById(cfg.errMsgId).textContent   = msg;
+  document.getElementById(cfg.errCodeId).textContent  = code ? `ERR_CODE: ${code}` : '';
+  document.getElementById(cfg.errOvId).classList.add('cam-err-overlay--visible');
+}
+
+/*
+  hideCamError — clears the error overlay for a given persona.
+*/
+function hideCamError(persona) {
+  const cfg = PERSONA_CAM[persona];
+  if (!cfg) return;
+  document.getElementById(cfg.errOvId).classList.remove('cam-err-overlay--visible');
+}
+
+/*
+  attachStreamToVideo — assigns an existing MediaStream to a
+  <video> element and fades it in once playback begins.
+*/
+function attachStreamToVideo(videoEl) {
+  videoEl.srcObject = activeStream;
+  videoEl.play().catch(() => {/* autoplay may be suppressed — stream still assigned */});
+  videoEl.classList.add('cam-live-video--active');
+}
+
+/*
+  startCamera — called immediately after navigateTo() on a
+  successful login.  Acquires getUserMedia once; on subsequent
+  calls (e.g. admin ↔ viewer switch) it simply reattaches.
+
+  @param {string} username — key in PERSONA_CAM
+*/
+async function startCamera(username) {
+  const cfg = PERSONA_CAM[username];
+  if (!cfg) return;   /* unknown persona — do nothing */
+
+  hideCamError(username);
+  const videoEl = document.getElementById(cfg.videoId);
+
+  /* Stream already acquired — just (re)attach and return */
+  if (activeStream) {
+    attachStreamToVideo(videoEl);
+    return;
+  }
+
+  /* Guard: getUserMedia requires a secure context (HTTPS / localhost) */
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showCamError(username,
+      'API UNAVAILABLE',
+      'navigator.mediaDevices.getUserMedia is not supported in this browser or context. ' +
+      'Serve this page over HTTPS or localhost to enable hardware access.',
+      'APIUnavailable'
+    );
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false,
+    });
+    activeStream = stream;
+    attachStreamToVideo(videoEl);
+
+  } catch (err) {
+    /*
+      Isolated error branches — each surfaces a clear, actionable
+      message inside the relevant viewport overlay.
+    */
+    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      showCamError(username,
+        'CAMERA ACCESS DENIED',
+        'Permission was denied by the user or browser policy. ' +
+        'Grant camera access in your browser settings then log in again.',
+        'NotAllowedError'
+      );
+    } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+      showCamError(username,
+        'HARDWARE NOT FOUND',
+        'No camera was detected. Connect a webcam and ensure the OS recognises it, then retry.',
+        'NotFoundError'
+      );
+    } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+      showCamError(username,
+        'DEVICE BUSY',
+        'The camera is in use by another application. Close it and log in again.',
+        'NotReadableError'
+      );
+    } else if (err.name === 'OverconstrainedError') {
+      showCamError(username,
+        'CONSTRAINT MISMATCH',
+        'The requested resolution or facing mode is unsupported by the connected camera hardware.',
+        'OverconstrainedError'
+      );
+    } else if (err.name === 'SecurityError') {
+      showCamError(username,
+        'SECURITY POLICY VIOLATION',
+        'Camera access is blocked by the browser sandbox. ' +
+        'This console must run over HTTPS or localhost.',
+        'SecurityError'
+      );
+    } else {
+      showCamError(username,
+        'UNKNOWN HARDWARE ERROR',
+        `An unexpected error occurred: ${err.message || 'no details available.'}`,
+        err.name || 'UnknownError'
+      );
+    }
+  }
+}
+
+/*
+  stopCamera — stops all tracks and clears srcObject on LOGOUT.
+  Called when any logout button (data-nav="page-login") is clicked.
+*/
+function stopCamera() {
+  if (activeStream) {
+    activeStream.getTracks().forEach(t => t.stop());
+    activeStream = null;
+  }
+  /* Clear both video elements */
+  ['adminVideo', 'viewerVideo'].forEach(id => {
+    const v = document.getElementById(id);
+    if (v) {
+      v.srcObject = null;
+      v.classList.remove('cam-live-video--active');
+    }
+  });
+  /* Clear both error overlays */
+  document.querySelectorAll('.cam-err-overlay').forEach(el =>
+    el.classList.remove('cam-err-overlay--visible')
+  );
+}
+
+/*
+  Intercept logout navigation to stop the camera before the
+  login page is shown.  Uses event delegation so it works for
+  all [data-nav="page-login"] buttons without modifying the
+  original click handler.
+*/
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-nav="page-login"]');
+  if (btn) stopCamera();
+}, true /* capture phase — runs before the original bubbling handler */);
+  </script>
+</body>
+</html>
